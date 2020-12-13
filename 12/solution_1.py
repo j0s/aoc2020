@@ -71,11 +71,11 @@ movements: Dict[str, Callable[[Ship, int], None]] = {
 
 def parse_input(filename: str) -> List[Tuple[str, int]]:
     with open(filename, "r") as f:
-        commends = []
+        commands = []
         for line in f:
             line = line.strip()
-            commends.append((line[0], int(line[1:])))
-        return commends
+            commands.append((line[0], int(line[1:])))
+        return commands
 
 
 def apply_movement(ship: Ship, movement: Tuple[str, int]):
