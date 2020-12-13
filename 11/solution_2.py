@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 import sys
-from typing import IO, Any, List, Optional, Dict
+from typing import IO, Any, Optional, List
+from enum import Enum
 from dataclasses import dataclass
 
 debug: bool = False
@@ -22,16 +23,34 @@ class Seat:
     y: int
 
 
-def parse_input(filename: str) -> Dict[Seat, bool]:
-    seats: Dict[Seat, bool] = {}
+class CoordState(Enum):
+    FREE_SEAT = 1
+    TAKEN_SEAT = 2
+    NO_SEAT = 3
+
+
+SYMBOL_MAP = {
+    "L": CoordState.FREE_SEAT,
+    "#": CoordState.TAKEN_SEAT,
+    ".": CoordState.NO_SEAT,
+}
+
+CHAR_MAP = {
+    CoordState.FREE_SEAT: "L",
+    CoordState.TAKEN_SEAT: "#",
+    CoordState.NO_SEAT: ".",
+}
+
+
+def parse_input(filename: str) -> List[List[CoordState]]:
+    seats: List[List[CoordState]] = []
     with open(filename, "r") as f:
-        for i, line in enumerate(f):
+        for line in f:
             line = line.strip()
-            for j, char in enumerate(line):
-                if char == "L":
-                    seats[Seat(i, j)] = False
-                elif char == "#":
-                    seats[Seat(i, j)] = True
+            row = []
+            for char in line:
+                row.append(SYMBOL_MAP[char])
+            seats.append(row)
     return seats
 
 
@@ -48,57 +67,124 @@ def get_surrounding_coords(seat: Seat) -> List[Seat]:
     ]
 
 
-def will_become_empty(
-    seats: Dict[Seat, bool], seat: Seat, max_x: int, max_y: int
-) -> bool:
+def taken_seen_seats(seats: List[List[CoordState]], seat: Seat) -> int:
     occupied_seats = 0
-    for x in range(seat.x - 1, -1, -1):
-        for y in range(seat.y - 1, -1, -1):
-            if seats[Seat(x, y)] is True:
-                occupied_seats += 1
-                break
-        for y in range(seat.y + 1, max_y + 1):
-            if seats[Seat(x, y)] is True:
-                occupied_seats += 1
-                break
-    return occupied_seats >= 5
+    # Left up
+    for offset, x in enumerate(range(seat.x - 1, -1, -1), 1):
+        y = seat.y - offset
+        if y < 0 or seats[y][x] == CoordState.FREE_SEAT:
+            break
+        if seats[y][x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    # Left down
+    for offset, x in enumerate(range(seat.x - 1, -1, -1), 1):
+        y = seat.y + offset
+        if y > MAX_Y or seats[y][x] == CoordState.FREE_SEAT:
+            break
+        if seats[y][x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    # Left
+    for offset, x in enumerate(range(seat.x - 1, -1, -1), 1):
+        if seats[seat.y][x] == CoordState.FREE_SEAT:
+            break
+        if seats[seat.y][x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    # Right up
+    for offset, x in enumerate(range(seat.x + 1, MAX_X + 1), 1):
+        y = seat.y - offset
+        if y < 0 or seats[y][x] == CoordState.FREE_SEAT:
+            break
+        if seats[y][x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    # Right down
+    for offset, x in enumerate(range(seat.x + 1, MAX_X + 1), 1):
+        y = seat.y + offset
+        if y > MAX_Y or seats[y][x] == CoordState.FREE_SEAT:
+            break
+        if seats[y][x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    # Right
+    for offset, x in enumerate(range(seat.x + 1, MAX_X + 1), 1):
+        if seats[seat.y][x] == CoordState.FREE_SEAT:
+            break
+        if seats[seat.y][x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    # Up
+    for y in range(seat.y - 1, -1, -1):
+        if seats[y][seat.x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+        elif seats[y][seat.x] == CoordState.FREE_SEAT:
+            break
+
+    # Down
+    for y in range(seat.y + 1, MAX_Y + 1):
+        if seats[y][seat.x] == CoordState.FREE_SEAT:
+            break
+        if seats[y][seat.x] == CoordState.TAKEN_SEAT:
+            occupied_seats += 1
+            break
+
+    return occupied_seats
 
 
-def will_become_occupied(seats: Dict[Seat, bool], seat: Seat) -> bool:
+def will_become_empty(seats: List[List[CoordState]], seat: Seat) -> bool:
     return (
-        len(
-            [s for s in get_surrounding_coords(seat) if s in seats and seats[s] is True]
-        )
-        == 0
+        seats[seat.y][seat.x] == CoordState.TAKEN_SEAT
+        and taken_seen_seats(seats, seat) >= 5
     )
 
 
-def do_moves(seats: Dict[Seat, bool], max_x: int, max_y: int) -> int:
+def will_become_occupied(seats: List[List[CoordState]], seat: Seat) -> bool:
+    return (
+        seats[seat.y][seat.x] == CoordState.FREE_SEAT
+        and taken_seen_seats(seats, seat) == 0
+    )
+
+
+def do_moves(seats: List[List[CoordState]]) -> int:
     moves = 0
-    old_seats = seats.copy()
-    for seat, taken in old_seats.items():
-        if taken and will_become_empty(old_seats, seat, max_x, max_y):
-            log(f"{seat} will become free")
-            moves += 1
-            seats[seat] = not taken
-        if not taken and will_become_occupied(old_seats, seat):
-            log(f"{seat} will become occupied")
-            moves += 1
-            seats[seat] = not taken
+    old_seats = []
+    for row in seats:
+        old_seats.append(row.copy())
+    for y, row in enumerate(old_seats):
+        for x, _ in enumerate(row):
+            if will_become_empty(old_seats, Seat(x, y)):
+                moves += 1
+                seats[y][x] = CoordState.FREE_SEAT
+            elif will_become_occupied(old_seats, Seat(x, y)):
+                moves += 1
+                seats[y][x] = CoordState.TAKEN_SEAT
     return moves
+
+
+def print_seats(seats: List[List[CoordState]]):
+    log("seats:")
+    for row in seats:
+        log("".join([CHAR_MAP[x] for x in row]))
 
 
 if __name__ == "__main__":
     debug = "--debug" in sys.argv
     seats_input = parse_input(sys.argv[-1])
-    max_x = max(seats_input.keys(), key=lambda s: s.x).x
-    max_y = max(seats_input.keys(), key=lambda s: s.y).y
-    print(seats_input)
+    MAX_Y = len(seats_input) - 1
+    MAX_X = len(seats_input[0]) - 1
     iterations = 0
-    while do_moves(seats_input, max_x, max_y) > 0:
+    while do_moves(seats_input) > 0:
+        print_seats(seats_input)
         iterations += 1
-    print(
-        f"iterations: {iterations} "
-        f"occupied seats: {len([1 for _, occupied in seats_input.items() if occupied])}"
-    )
-    print(seats_input)
+
+    occupied_seats = sum([row.count(CoordState.TAKEN_SEAT) for row in seats_input])
+    print(f"iterations: {iterations} " f"occupied seats: {occupied_seats}")
