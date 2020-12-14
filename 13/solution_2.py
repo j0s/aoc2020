@@ -2,6 +2,7 @@
 
 import sys
 from typing import IO, Any, List, Optional, Tuple
+from dataclasses import dataclass
 
 debug: bool = False
 logfile: Optional[IO[Any]] = None
@@ -15,35 +16,54 @@ def log(msg: str) -> None:
         logfile.write(msg + "\n")
 
 
-def parse_line(line: str) -> List[Tuple[int, int]]:
+@dataclass
+class Bus:
+    time: int
+    offset: int
+
+
+def parse_line(line: str) -> List[Bus]:
     buses = []
-    for offset, bus in enumerate(line.split(",")):
-        if bus == "x":
+    for offset, time in enumerate(line.split(",")):
+        if time == "x":
             continue
-        buses.append((offset, int(bus)))
+        buses.append(Bus(int(time), offset))
     return buses
 
 
-def parse_input(filename: str) -> List[Tuple[int, int]]:
+def parse_input(filename: str) -> List[Bus]:
     with open(filename, "r") as f:
         f.readline()  # ignore first line
         return parse_line(f.readline().strip())
 
 
-def valid_timestamp(time: int, buses: List[Tuple[int, int]]) -> bool:
-    for offset, bus in buses:
-        if (time + offset) % bus != 0:
-            return False
-    return True
+def lcd(a: int, b: int) -> int:
+    if b == 0:
+        return a
+    return lcd(b, a % b)
 
 
-def find_valid_timestamp(buses: List[Tuple[int, int]]) -> int:
-    first_bus_time = buses[0][1]
-    time = first_bus_time
-    while not valid_timestamp(time, buses):
-        time += first_bus_time
-        print(f"{time}")
-    return time
+def lcm(a: int, b: int) -> int:
+    x = a // lcd(a, b) * b
+    return x
+
+
+def solve_two(bus: Bus, start_time: int, min_increase: int) -> Tuple[int, int]:
+    while (start_time + bus.offset) % bus.time != 0:
+        start_time += min_increase
+    return start_time, lcm(bus.time, min_increase)
+
+
+def find_valid_timestamp(buses: List[Bus]) -> int:
+    start_time = min_increase = buses[0].time
+    for bus in buses:
+        start_time, min_increase = solve_two(bus, start_time, min_increase)
+        print(bus, start_time, min_increase)
+
+    for bus in buses:
+        assert (start_time + bus.offset) % bus.time == 0
+
+    return start_time
 
 
 if __name__ == "__main__":
